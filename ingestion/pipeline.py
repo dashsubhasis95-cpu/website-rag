@@ -1,3 +1,5 @@
+from urllib.parse import urlparse
+
 from ingestion.bfs_crawler import BFSCrawler
 from ingestion.crawler import WebsiteCrawler
 from ingestion.extractor import CrawlResultExtractor
@@ -11,8 +13,10 @@ class IngestionPipeline:
         extractor = CrawlResultExtractor()
         normalizer = DocumentNormalizer()
 
+        allowed_domain = urlparse("https://docs.langchain.com").netloc
+
         link_filter = LinkFilter(
-            allowed_domains={"docs.langchain.com"}
+            allowed_domains={allowed_domain},
         )
 
         self.crawler = BFSCrawler(
@@ -24,6 +28,7 @@ class IngestionPipeline:
 
     async def run(self, url: str):
         return await self.crawler.crawl(
-            url,
+            start_url=url,
             max_pages=20,
+            max_depth=2,
         )

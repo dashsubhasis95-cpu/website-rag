@@ -22,16 +22,16 @@ class BFSCrawler:
     async def crawl(
         self,
         start_url: str,
-        max_pages: int = 10,
+        max_pages: int = 20,
+        max_depth: int = 2,
     ):
-        queue = deque([start_url])
-        queued = {start_url}      # URLs currently in the queue
-        visited = set()           # URLs already crawled
+        queue = deque([(start_url, 0)])
+        queued = {start_url}
+        visited = set()
         documents = []
 
         while queue and len(documents) < max_pages:
-            url = queue.popleft()
-            queued.remove(url)
+            url, depth = queue.popleft()
 
             if url in visited:
                 continue
@@ -46,6 +46,10 @@ class BFSCrawler:
 
                 documents.append(document)
 
+                # Don't expand beyond max_depth
+                if depth >= max_depth:
+                    continue
+
                 for link in document.links.internal:
                     if not self.link_filter.is_allowed(link):
                         continue
@@ -54,7 +58,7 @@ class BFSCrawler:
                         link.href not in visited
                         and link.href not in queued
                     ):
-                        queue.append(link.href)
+                        queue.append((link.href, depth + 1))
                         queued.add(link.href)
 
             except Exception as e:
