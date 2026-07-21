@@ -9,26 +9,31 @@ from ingestion.normalizer import DocumentNormalizer
 
 class IngestionPipeline:
     def __init__(self):
-        crawler = WebsiteCrawler()
-        extractor = CrawlResultExtractor()
-        normalizer = DocumentNormalizer()
+        self.crawler = WebsiteCrawler()
+        self.extractor = CrawlResultExtractor()
+        self.normalizer = DocumentNormalizer()
 
-        allowed_domain = urlparse("https://docs.langchain.com").netloc
+    async def run(
+        self,
+        url: str,
+        max_pages: int = 20,
+        max_depth: int = 2,
+    ):
+        allowed_domain = urlparse(url).netloc.lower()
 
         link_filter = LinkFilter(
             allowed_domains={allowed_domain},
         )
 
-        self.crawler = BFSCrawler(
-            crawler,
-            extractor,
-            normalizer,
-            link_filter,
+        bfs_crawler = BFSCrawler(
+            crawler=self.crawler,
+            extractor=self.extractor,
+            normalizer=self.normalizer,
+            link_filter=link_filter,
         )
 
-    async def run(self, url: str):
-        return await self.crawler.crawl(
+        return await bfs_crawler.crawl(
             start_url=url,
-            max_pages=20,
-            max_depth=2,
+            max_pages=max_pages,
+            max_depth=max_depth,
         )

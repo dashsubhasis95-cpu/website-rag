@@ -7,13 +7,15 @@ async def main():
     pipeline = IngestionPipeline()
 
     documents = await pipeline.run(
-        "https://docs.langchain.com"
+        "https://docs.langchain.com",
+        max_pages=10,
+        max_depth=2,
     )
 
     print(f"Crawled {len(documents)} pages")
 
-    for doc in documents:
-        print(doc.url)
+    for document in documents:
+        print(document.url)
 
 
 if __name__ == "__main__":
