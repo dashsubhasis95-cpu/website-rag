@@ -25,11 +25,13 @@ class BFSCrawler:
         max_pages: int = 10,
     ):
         queue = deque([start_url])
-        visited = set()
+        queued = {start_url}      # URLs currently in the queue
+        visited = set()           # URLs already crawled
         documents = []
 
         while queue and len(documents) < max_pages:
             url = queue.popleft()
+            queued.remove(url)
 
             if url in visited:
                 continue
@@ -48,8 +50,12 @@ class BFSCrawler:
                     if not self.link_filter.is_allowed(link):
                         continue
 
-                    if link.href not in visited:
+                    if (
+                        link.href not in visited
+                        and link.href not in queued
+                    ):
                         queue.append(link.href)
+                        queued.add(link.href)
 
             except Exception as e:
                 print(f"Failed to crawl {url}: {e}")
