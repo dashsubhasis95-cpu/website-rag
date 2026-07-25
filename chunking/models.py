@@ -160,3 +160,160 @@ class DocumentTree:
 
     def __iter__(self):
         return iter(self.nodes.values())
+
+    def walk(self, node_id: str | None = None):
+        """Depth-first traversal starting at *node_id* (defaults to root)."""
+        start = node_id or self.root
+        stack = [start]
+
+        while stack:
+            current_id = stack.pop()
+            node = self.get(current_id)
+            yield node
+
+            for child_id in reversed(node.children):
+                stack.append(child_id)
+
+
+# ==========================================================
+# Chunking Configuration
+# ==========================================================
+
+class ChunkStrategy(Enum):
+    PROSE = "prose"
+    CODE = "code"
+    TABLE = "table"
+    HEADING = "heading"
+    STRUCTURE = "structure"
+
+
+class ChunkLevel(Enum):
+    PARENT = "parent"
+    CHILD = "child"
+
+
+@dataclass(slots=True, frozen=True)
+class ChunkingConfig:
+    max_tokens: int = 512
+    min_tokens: int = 32
+    overlap_tokens: int = 64
+    encoding_name: str = "cl100k_base"
+    include_heading_prefix: bool = True
+    split_code_blocks: bool = False
+    merge_small_chunks: bool = True
+    prefix_heading_levels: int = 2
+    enable_hierarchical: bool = True
+    parent_max_tokens: int = 2048
+    parent_overlap_tokens: int = 128
+    enable_heading_chunks: bool = True
+    split_oversized_code: bool = True
+    split_oversized_tables: bool = True
+    code_overlap_lines: int = 3
+    table_rows_per_chunk: int = 8
+    table_overlap_rows: int = 1
+
+
+# ==========================================================
+# Section (intermediate grouping unit)
+# ==========================================================
+
+@dataclass(slots=True)
+class Section:
+    heading_path: list[str]
+    heading_level: int
+    nodes: list[DocumentNode] = field(default_factory=list)
+    part_index: int = 0
+    is_continuation: bool = False
+
+
+# ==========================================================
+# Chunk Output
+# ==========================================================
+
+@dataclass(slots=True)
+class ChunkMetadata:
+    source_url: str = ""
+    page_title: str = ""
+    heading_path: list[str] = field(default_factory=list)
+    heading_level: int = 0
+    chunk_index: int = 0
+    token_count: int = 0
+    content_types: list[str] = field(default_factory=list)
+    node_ids: list[str] = field(default_factory=list)
+    char_count: int = 0
+    is_continuation: bool = False
+    chunk_level: ChunkLevel = ChunkLevel.CHILD
+    parent_id: str | None = None
+    child_ids: list[str] = field(default_factory=list)
+    section_index: int = 0
+    strategy: ChunkStrategy = ChunkStrategy.PROSE
+
+
+@dataclass(slots=True)
+class Chunk:
+    id: str
+    content: str
+    metadata: ChunkMetadata
+
+    @property
+    def token_count(self) -> int:
+        return self.metadata.token_count
+
+
+@dataclass(slots=True)
+class ChunkingResult:
+    chunks: list[Chunk] = field(default_factory=list)
+    source_url: str = ""
+    page_title: str = ""
+    total_tokens: int = 0
+    warnings: list[str] = field(default_factory=list)
+
+    @property
+    def chunk_count(self) -> int:
+        return len(self.chunks)
+
+    @property
+    def parent_chunks(self) -> list[Chunk]:
+        return [
+            chunk for chunk in self.chunks
+            if chunk.metadata.chunk_level == ChunkLevel.PARENT
+        ]
+
+    @property
+    def child_chunks(self) -> list[Chunk]:
+        return [
+            chunk for chunk in self.chunks
+            if chunk.metadata.chunk_level == ChunkLevel.CHILD
+        ]
+
+    @property
+    def parent_count(self) -> int:
+        return len(self.parent_chunks)
+
+    @property
+    def child_count(self) -> int:
+        return len(self.child_chunks)
+
+    @property
+    def heading_chunks(self) -> list[Chunk]:
+        return [
+            chunk for chunk in self.chunks
+            if chunk.metadata.strategy == ChunkStrategy.HEADING
+        ]
+
+    def resolve_parent_context(self, child: Chunk) -> str | None:
+        """Return full parent text for a retrieved child (includes continuations)."""
+        if child.metadata.parent_id is None:
+            return None
+
+        root_id = child.metadata.parent_id
+        parent_parts = [
+            chunk for chunk in self.parent_chunks
+            if chunk.id == root_id or chunk.metadata.parent_id == root_id
+        ]
+
+        if not parent_parts:
+            return None
+
+        parent_parts.sort(key=lambda chunk: chunk.metadata.chunk_index)
+        return "\n\n".join(chunk.content for chunk in parent_parts)
